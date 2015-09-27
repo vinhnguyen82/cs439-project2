@@ -10,60 +10,100 @@ typedef int bool;
 #define true 1
 #define false 0
 
+typedef struct chunk* chunkptr;
+
 typedef struct chunk {
-   struct chunk *next;
-   struct chunk *prev;
-   struct chunk *nextFreeChunk;
+   chunkptr next;
+   chunkptr prev;
+   chunkptr nextFreeChunk;
+   chunkptr prevFreeChunk;
    size_t size;
-   unsigned status;
-}
+   unsigned isfree;
+} chunk;
 
-chunk *header = NULL;
-chuck *freeHeader = NULL;
-
-// typedef struct freeChunk {
-//    struct chunk *c;
-//    size
-// }
+chunkptr header;
+chunkptr freeHeader;
+const size_t CHUNK_SIZE= sizeof(chunk);
 
 void my_malloc_init(size_t size)
 {
    mem = malloc(size);
-   chunk initial = {
-      .next = NULL;
-      .prev = NULL;
-      .nextFreeChunk = NULL;
-      .size = size;
-      status = 0;
+   header = (chunkptr) mem;
+   freeHeader = header;
 
-   }
-
-   header = &initial;
-   freeHeader = &initial;
+   *freeHeader = (chunk) {NULL, header, NULL, freeHeader, size, true};
 }
 
-// go from temp = freeHeader
-// if temp is enough change stop = true
 void *my_malloc(size_t size)
 {
-   bool stop = false;
-   chuck *temp = freeHeader;
-   while (freeHeader->nextFreeChunk != NULL && !stop) {
-      if (temp->nextFreeChunk.size = size) {
-         temp->nextFreeChunk = temp->nextFreeChunk.nextFreeChunk;
-         temp.status = 1;
-      } else if (temp->nextFreeChunk.size > size) {
-         size_t newFreeSize = temp->nextFreeChunk.size - size;
+   chunkptr iter = freeHeader;
+   printf("Iter: %lu \n", (size_t) iter);
 
+   while (iter != NULL) {
+      // if free block is not enough
+      if (iter->size < size + CHUNK_SIZE) {
+         iter = iter->nextFreeChunk;
+         continue;
       }
 
+      // remaining free space after use
+      size_t diffSize = iter->size - CHUNK_SIZE - size;
+
+      if (diffSize <= CHUNK_SIZE) {
+         printf("inside of <=\n");
+
+         // we will give them all the free block
+         // update current free chunk to allocated
+         iter->isfree = false;
+
+         // check if it is the last block
+         if (iter->nextFreeChunk != NULL) {
+            (iter->nextFreeChunk)->nextFreeChunk = iter->prevFreeChunk;
+         }
+
+         // if free chunk is the first one, update freeHeader
+         if (iter->prevFreeChunk == freeHeader) {
+            freeHeader = iter->nextFreeChunk;
+         }
+
+         // return the pointer at address after struct of that location
+         return (iter + CHUNK_SIZE);
+
+      } else {
+         printf("inside of >\n");
+
+         // calculate the address of remain memory
+         chunkptr remain = (chunkptr)((size_t) iter + CHUNK_SIZE + size);
+         printf("remain: %lu \n", (size_t) remain);
+
+         // update current future used chunk
+         iter->isfree = false;
+         iter->size = size + CHUNK_SIZE;
+
+         // update remaining free space
+         remain->size = diffSize;
+         remain->prevFreeChunk = iter->prevFreeChunk;
+         printf("Prev free: %lu \n", (size_t) remain->prevFreeChunk);
+         remain->nextFreeChunk = iter->nextFreeChunk;
+         remain->prev = iter;
+         remain->next = iter->next;
+         remain->isfree = true;
+
+         // if free chunk is the first one, update freeHeader
+         if (iter->prevFreeChunk == freeHeader) {
+            freeHeader = remain;
+            remain->prevFreeChunk = freeHeader;
+         }
+
+         // continue to update future used chunk
+         iter->next = remain;
+         iter->nextFreeChunk = NULL;
+         iter->prevFreeChunk = NULL;
+
+         return (iter + CHUNK_SIZE);
       }
    }
    return NULL;
-}
-
-void updateFreeChunkOrder(chunk *ptr) {
-   
 }
 
 
