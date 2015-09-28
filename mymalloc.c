@@ -35,7 +35,7 @@ void my_malloc_init(size_t size)
 }
 
 void *my_malloc(size_t size)
-{  
+{
    chunkptr iter = freeHeader;
    while (iter != NULL) {
       // if free block is not enough
@@ -95,8 +95,6 @@ void *my_malloc(size_t size)
       }
    }
 
-
-
    return NULL;
 }
 
@@ -147,7 +145,7 @@ void my_free(void *ptr)
 
    // check if we can merge left or merge right
    // both left and right chunk are free
-   chunkptr i = freeHeader; 
+   chunkptr i = freeHeader;
    while (i != NULL) {
       chunkptr temp = i->next;
       // if i is last chunk
@@ -197,7 +195,7 @@ static void draw_box(FILE *stream, int size, int empty, int last)
 
    for (i++; i<size; i++)
    {
-      fprintf(stream, "|                     |\n");   
+      fprintf(stream, "|                     |\n");
    }
 
    if (!empty) fprintf(stream, "%c[%dm", 0x1B, 0);
