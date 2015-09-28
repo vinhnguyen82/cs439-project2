@@ -5,13 +5,13 @@
 #include <inttypes.h>
 #include <assert.h>
 
-int main() 
+int main()
 {
    my_malloc_init(12 * MiB);
 
    void *b1 = my_malloc(2 * MiB);
    assert(b1);
-   
+
    void *b2 = my_malloc(2 * MiB);
    assert(b2);
 
