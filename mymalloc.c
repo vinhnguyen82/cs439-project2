@@ -19,203 +19,162 @@ typedef struct chunk {
    chunkptr prevFreeChunk;
    size_t size;
    unsigned isfree;
+   void* location;
 } chunk;
 
-chunkptr header;
-chunkptr freeHeader;
-const size_t CHUNK_SIZE= sizeof(chunk);
+chunkptr header = NULL;
+chunkptr freeHeader = NULL;
 
 void my_malloc_init(size_t size)
 {
    mem = malloc(size);
-   header = (chunkptr) mem;
-   // printf("header: %lu \n", (size_t) header);
+   // initial first chunk
+   header = malloc (sizeof(chunk));
    freeHeader = header;
-   // printf("freeHeader: %lu \n", (size_t) freeHeader);
-
-   *freeHeader = (chunk) {NULL, header, NULL, freeHeader, size, true};
+   *header = (struct chunk) {NULL, header, NULL, freeHeader, size, true, mem};
 }
 
 void *my_malloc(size_t size)
-{
+{  
    chunkptr iter = freeHeader;
-   // printf("iter: %lu \n", (size_t) iter);
-
    while (iter != NULL) {
       // if free block is not enough
-
-      if (iter->size < size + CHUNK_SIZE) {
+      if (iter->size < size) {
          iter = iter->nextFreeChunk;
-         // printf("pass");
          continue;
       }
 
       // remaining free space after use
-      printf("iter->size: %lu\n", iter->size);
-      size_t diffSize = iter->size - CHUNK_SIZE - size;
-      printf("diffside: %lu\n", diffSize);
+      size_t diffSize = iter->size - size;
 
-      if (diffSize <= CHUNK_SIZE) {
+      if (diffSize == 0) {
          // we will give them all the free block
          // update current free chunk to allocated
          iter->isfree = false;
 
-         // check if it is the last block
-         if (iter->nextFreeChunk != NULL) {
-            (iter->nextFreeChunk)->nextFreeChunk = iter->prevFreeChunk;
-         }
-
          // if free chunk is the first one, update freeHeader
          if (iter->prevFreeChunk == freeHeader) {
             freeHeader = iter->nextFreeChunk;
+            freeHeader->prevFreeChunk = freeHeader;
+         } else {
+            (iter->prevFreeChunk)->nextFreeChunk = iter->nextFreeChunk;
          }
 
-         // return the pointer at address after struct of that location
-         return (iter + CHUNK_SIZE);
+         // delete iter info about free chunk
+         iter->prevFreeChunk = NULL;
+         iter->nextFreeChunk = NULL;
+         return iter->location;
 
       } else {
-         printf("freeHeader: %lu \n", (size_t) freeHeader);
-         printf("freeHeader point to null: %lu \n", (size_t) freeHeader->nextFreeChunk);
          // calculate the address of remain memory
-         chunkptr remain = (chunkptr)((size_t) iter + CHUNK_SIZE + size);
-         printf("remain: %lu \n", (size_t) remain);
-         // printf("iter->prevFreeChunk: %lu \n", (size_t) iter->prevFreeChunk);
-         // update current future used chunk
-         iter->isfree = false;
-         iter->size = size + CHUNK_SIZE;
+         size_t loc = (size_t) iter->location + size;
 
-         // update remaining free space
-         remain->size = diffSize;
-         printf("remain_diffsize: %lu \n", diffSize);
-         printf("freeHeader: %lu \n", (size_t) freeHeader);
-         printf("iter: %lu \n", (size_t) iter);
-         remain->prevFreeChunk = iter->prevFreeChunk;
-         remain->nextFreeChunk = iter->nextFreeChunk;
-         (iter->prevFreeChunk)->nextFreeChunk = remain;
+         // create a chunk for remaining space
+         chunkptr remain = malloc(sizeof(chunk));
+         *remain = (chunk){iter->next, iter, iter->nextFreeChunk, iter->prevFreeChunk, iter->size - size, true, (void *) loc};
 
-         printf("iter->nextFreeChunk: %lu \n", (size_t) iter->nextFreeChunk);
-         remain->prev = iter;
-         printf("iter->prevFreeChunk: %lu \n", (size_t) iter->prevFreeChunk);
-
-         remain->next = iter->next;
-         remain->isfree = true;
-
-         // if free chunk is the first one, update freeHeader
          if (iter->prevFreeChunk == freeHeader) {
+            remain->prevFreeChunk = remain;
             freeHeader = remain;
-            printf("freeHeader: %lu \n", (size_t) freeHeader);
-            printf("header: %lu \n", (size_t) header);
-            remain->prevFreeChunk = freeHeader;
          }
 
-         // continue to update future used chunk
+         // udpate pointers
+         // iter is not the last chunk
+         if (iter->next != NULL) {
+            (iter->next)->prev = remain;
+         }
+         iter->size = size;
+         iter->isfree = false;
          iter->next = remain;
+
+         // reset iter free status
          iter->nextFreeChunk = NULL;
          iter->prevFreeChunk = NULL;
-         // printf("Struct size %lu \n", CHUNK_SIZE);
-         // printf("iter: %lu \n", (size_t) iter);
-         // printf("Struct size %lu \n", CHUNK_SIZE);
-         size_t total = (size_t) iter + CHUNK_SIZE;
-         // printf("total %lu\n", total);
-         // printf("Chunk header: %lu \n", (size_t) (iter + CHUNK_SIZE));
 
-         // different when use (size_t) (iter + CHUNK_SIZE)
-         return (void *)total;
+         return iter->location;
       }
-      printf("loop");
    }
 
-   printf("no more memory");
+
+
    return NULL;
 }
 
-/**
- * @brief Free a previously allocated block so that it
- *        becomes available again.
- *        If possible, coalesc the block with adjacent free
- *        blocks.
- * @param [in] ptr   the pointer to the block.
- */
 void my_free(void *ptr)
 {
-// 
-   // printf("return address: %lu \n", (size_t) ptr);
    // get the chunk's struct
-   chunkptr temp = (chunkptr) ((size_t)ptr - CHUNK_SIZE);
+   // find struct of this location
+   chunkptr iter = header;
+   while (iter->location != ptr) {
+      iter = iter->next;
+   }
+   chunkptr current = iter;
    // it's already free
-   if (temp->isfree == true) {
+   if (current->isfree == true) {
       return;
    }
 
-   // printf("header: %lu \n", (size_t) header);
-   // printf("temp: %lu \n", (size_t) temp);
-
    // change status of the chunk
-   temp->isfree = true;
-
+   current->isfree = true;
 
    // check if the freeHeader point to greater address
-   if (freeHeader >= temp) {
+   if (freeHeader->location >= current->location) {
 
       // rearrange pointers
-      temp->nextFreeChunk = freeHeader;
-      freeHeader->prevFreeChunk = temp;
+      current->nextFreeChunk = freeHeader;
+      freeHeader->prevFreeChunk = current;
 
       // point freeHeader to first free space
-      freeHeader = temp;
-      temp->prevFreeChunk = temp;
-      printf("freeHeader after free: %lu \n", (size_t) freeHeader);
-      printf("freeHeader->prevFreeChunk: %lu \n", (size_t) freeHeader->prevFreeChunk);
-
+      freeHeader = current;
+      current->prevFreeChunk = current;
 
    } else {
-   // if not, find the closed free spacse on the left
-      chunkptr iter = temp->prev;
-      // printf("iter: %lu \n", (size_t) iter);
+      // if not, find the closed free spacse on the left
+      chunkptr iter = current->prev;
 
       while (iter->isfree != true) {
-         // printf("loop");
          iter = iter->prev;
       }
 
       // rearrage pointers
-      temp->nextFreeChunk = iter->nextFreeChunk;
-      if (temp->nextFreeChunk != NULL) {
-         (iter->nextFreeChunk)->prevFreeChunk = temp;
+      current->nextFreeChunk = iter->nextFreeChunk;
+      if (current->nextFreeChunk != NULL) {
+         (iter->nextFreeChunk)->prevFreeChunk = current;
       }
-      temp->prevFreeChunk = iter;
+      current->prevFreeChunk = iter;
 
    }
-   
 
    // check if we can merge left or merge right
    // both left and right chunk are free
-   if (temp != freeHeader && (temp->prev)->isfree == true && (temp->next)->isfree == true) {
-      size_t total = (temp->prev)->size + temp->size + (temp->next)->size;
-      (temp->prev)->nextFreeChunk = (temp->next)->nextFreeChunk;
-      (temp->next)->prevFreeChunk = temp->prev;
-      (temp->prev)->size = total;
+   chunkptr i = freeHeader; 
+   while (i != NULL) {
+      chunkptr temp = i->next;
+      // if i is last chunk
+      if (temp == NULL) {
+         break;
+      }
 
-      (temp->prev)->next = (temp->next)->next;
-      (temp->next)->next = temp->prev;
-   // only left chunk is free
-   } else if (temp != freeHeader && (temp->prev)->isfree == true) {
-      // printf("here");
-      size_t total = (temp->prev)->size + temp->size;
-      (temp->prev)->nextFreeChunk = temp->nextFreeChunk;
-      (temp->nextFreeChunk)->prevFreeChunk = temp->prev;
-      (temp->prev)->size = total;
-      (temp->prev)->next = temp->next;
-      (temp->next)->prev = temp->prev;
-   // // only right chunk is free
-   } else if ((temp->next)->isfree == true) {
-      size_t total = temp->size + (temp->next)->size;
-      temp->nextFreeChunk = (temp->next)->nextFreeChunk;
-      (temp->next)->prevFreeChunk = temp;
-      temp->size = total;
-      temp->next = (temp->next)->next;
-      if (temp->next != NULL) {
-         (temp->next)->prev = temp;
+      // next one is a free chunk
+      if (temp->isfree == true) {
+         // merge
+         i->size += temp->size;
+
+         chunkptr tempNext = temp->next;
+         i->next = tempNext;
+
+         if (tempNext != NULL) {
+            tempNext->prev = i;
+         }
+
+         i->nextFreeChunk = temp->nextFreeChunk;
+         if (temp->nextFreeChunk != NULL) {
+            (i->nextFreeChunk)->prevFreeChunk = temp;
+         }
+         free(temp);
+      } else {
+         // if not, go to the next free chunk
+         i = i->nextFreeChunk;
       }
    }
 }
@@ -248,12 +207,9 @@ static void draw_box(FILE *stream, int size, int empty, int last)
 
 void my_dump_mem(FILE *stream)
 {
-   // TODO: implement
-
    chunkptr iter = header;
-   int count = 0;
    while (iter != NULL) {
-      
+      // assume allocated blocks are MiB
       size_t size = iter->size / 1024 / 1024;
       if (iter->next == NULL) {
          draw_box(stream, size, iter->isfree, 1);
@@ -262,16 +218,6 @@ void my_dump_mem(FILE *stream)
       draw_box(stream, size, iter->isfree, 0);
       iter = iter->next;
    }
-   // the following is an example
-   // of a heap with four
-   // blocks of sizes 
-   // 1, 4, 1, and 5 
-   // and the third block unallocated
-   // (empty)
-   // draw_box(stream, 1, 0, 0);
-   // draw_box(stream, 4, 0, 0);
-   // draw_box(stream, 1, 1, 0);
-   // draw_box(stream, 5, 0, 1);
 }
 
 uint64_t my_address(void *ptr)
