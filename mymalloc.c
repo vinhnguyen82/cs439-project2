@@ -10,6 +10,8 @@ typedef int bool;
 #define true 1
 #define false 0
 
+// #define DEBUG
+
 typedef struct chunk* chunkptr;
 
 typedef struct chunk {
@@ -35,7 +37,7 @@ void my_malloc_init(size_t size)
 }
 
 void *my_malloc(size_t size)
-{
+{  
    chunkptr iter = freeHeader;
    while (iter != NULL) {
       // if free block is not enough
@@ -94,7 +96,6 @@ void *my_malloc(size_t size)
          return iter->location;
       }
    }
-
    return NULL;
 }
 
@@ -140,12 +141,13 @@ void my_free(void *ptr)
          (iter->nextFreeChunk)->prevFreeChunk = current;
       }
       current->prevFreeChunk = iter;
+      iter->nextFreeChunk = current;
 
    }
 
    // check if we can merge left or merge right
    // both left and right chunk are free
-   chunkptr i = freeHeader;
+   chunkptr i = freeHeader; 
    while (i != NULL) {
       chunkptr temp = i->next;
       // if i is last chunk
@@ -195,7 +197,7 @@ static void draw_box(FILE *stream, int size, int empty, int last)
 
    for (i++; i<size; i++)
    {
-      fprintf(stream, "|                     |\n");
+      fprintf(stream, "|                     |\n");   
    }
 
    if (!empty) fprintf(stream, "%c[%dm", 0x1B, 0);
@@ -205,10 +207,33 @@ static void draw_box(FILE *stream, int size, int empty, int last)
 
 void my_dump_mem(FILE *stream)
 {
+   #ifdef DEBUG
+   printf("header: %lu \n", (size_t) header);
+   chunkptr i = header;
+   int count = 0;
+   while (i != NULL) {
+      ++count;
+      printf("count = %d\n", count);
+      printf("freeHeader: %lu \n", (size_t) freeHeader);
+      printf("current: %lu \n", (size_t) i);
+      printf("current location: %lu \n", (size_t) i->location);
+
+      printf("prev: %lu \n", (size_t) i->prev);
+      printf("next: %lu \n", (size_t) i->next);
+      printf("prevFree: %lu \n", (size_t) i->prevFreeChunk);
+      printf("nextFree: %lu \n", (size_t) i->nextFreeChunk);
+      printf("size: %lu \n", i->size);
+      printf("isfree: %u\n", i->isfree);
+      printf("--------------------\n");
+
+      i = i->next;
+   }
+   #endif
+
    chunkptr iter = header;
    while (iter != NULL) {
       // assume allocated blocks are MiB
-      size_t size = iter->size / 1024 / 1024;
+      size_t size = iter->size / MiB;
       if (iter->next == NULL) {
          draw_box(stream, size, iter->isfree, 1);
          return;
